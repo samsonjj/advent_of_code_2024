@@ -10,6 +10,7 @@ version = "0.1.0"
 name = "day_1"
 version = "0.1.0"
 dependencies = [
+ "advent_of_code_2024",
  "itertools",
 ]
 

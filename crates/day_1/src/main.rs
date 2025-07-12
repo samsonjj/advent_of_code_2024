@@ -1,6 +1,8 @@
 use itertools::Itertools;
 use std::collections::HashMap;
 
+use advent_of_code_2024::aoc;
+
 #[allow(dead_code)]
 const INPUT: &'static str = include_str!("input.txt");
 #[allow(dead_code)]
@@ -23,8 +25,8 @@ fn parse_input(input: &str) -> (Vec<i32>, Vec<i32>) {
 
 fn main() {
     let input: &str = INPUT;
-    println!("part_1: {}", part_1(input));
-    println!("part_2: {}", part_2(input));
+    println!("part_1: {}", aoc::format_with_time(|| part_1(input)));
+    println!("part_2: {}", aoc::format_with_time(|| part_2(input)));
 }
 
 fn get_counts(list: &Vec<i32>) -> HashMap<i32, i32> {
