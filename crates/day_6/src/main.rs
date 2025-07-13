@@ -30,24 +30,29 @@ impl LabSim {
 
     fn run_loop_sim(&mut self) -> i32 {
         let mut sum = 0;
-        for j in 0..self.states.len() {
-            for i in 0..self.states[j].len() {
-                // don't run if guard is there or obstructed
-                if self.states[j][i] != '.'{
-                    continue;
-                }
 
-                // set obstruction
-                self.states[j][i] = '#';
-
-                // run guard sim
-                if self.run_sim() {
-                    sum += 1;
-                }
-
-                // reset
-                self.states[j][i] = '.';
+        // optimiziation: we only need to attemp to insert an obstruction in
+        // the original path of the guard. All other positionsn will not
+        // result in any changes to the guard's path.
+        self.run_sim();
+        let candidates = self.visited.iter().map(|item| item.clone()).collect::<Vec<(i32, i32)>>();
+        for candidate in candidates.iter() {
+            let (i, j) = (candidate.0 as usize, candidate.1 as usize);
+            // don't run if guard is there or obstructed
+            if self.states[j][i] != '.'{
+                continue;
             }
+
+            // set obstruction
+            self.states[j][i] = '#';
+
+            // run guard sim
+            if self.run_sim() {
+                sum += 1;
+            }
+
+            // reset
+            self.states[j][i] = '.';
         }
         sum
     }
