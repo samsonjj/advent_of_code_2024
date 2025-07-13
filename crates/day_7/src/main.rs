@@ -19,7 +19,6 @@ impl Equation {
     }
 
     fn is_valid_slice(value: i64, slice: &[i64], allow_concat: bool) -> bool {
-        dbg!(slice.len());
         if slice.len() == 0 {
             panic!("slice was empty");
         }
@@ -30,6 +29,15 @@ impl Equation {
         // start from the right side of the vec
         // if we would add (+)
         let last_index = slice.len()-1;
+        if (allow_concat) {
+            // find modulus, it should be a power of 10
+            let last = slice[last_index];
+            let modulus = 10_i64.pow(format!("{last}").len() as u32);
+            let remainder = value % modulus;
+            if remainder == last && Self::is_valid_slice(value / modulus, &slice[..last_index], allow_concat) {
+                return true;
+            }
+        }
         Self::is_valid_slice(value - slice[last_index], &slice[..last_index], allow_concat)
             || (value % slice[last_index] == 0 && Self::is_valid_slice(value / slice[last_index], &slice[..last_index], allow_concat))
     }
