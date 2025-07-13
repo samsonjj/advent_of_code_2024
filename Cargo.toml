@@ -6,5 +6,5 @@ edition = "2024"
 [dependencies]
 
 [workspace]
-members = ["crates/day_1"]
+members = ["crates/day_1", "crates/day_2"]
 
