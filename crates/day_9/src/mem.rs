@@ -38,11 +38,11 @@ impl BlockMemory {
 
             // loop over files
             'file: loop {
-                let Some(file) = file_scanner.next() else { break; };
+                let Some(file) = file_scanner.next(self) else { break; };
 
                 // loop over freespace
                 'freespace: loop {
-                    let Some(freespace) = freespace_scanner.next() else { break; };
+                    let Some(freespace) = freespace_scanner.next(self) else { break; };
 
                     let file_len = file.1.1 - file.1.0;
                     let freespace_len = freespace.1 - freespace.0;
@@ -67,43 +67,44 @@ enum ScannerValue {
     Eof,
 }
 
-struct Scanner<'a> {
+struct Scanner {
     marker: usize, // set marker flags on a position, so it can be compared to later
     pointer: usize,
-    memory: &'a BlockMemory,
 }
 
-impl<'a> Scanner<'a> {
-    fn start(memory: &'a BlockMemory) -> Self {
-        Self { marker: 0, pointer: 0, memory }
+impl Scanner {
+    fn start() -> Self {
+        Self { marker: 0, pointer: 0 }
     }
-    fn end(memory: &'a BlockMemory) -> Self {
+
+    fn end(memory: &BlockMemory) -> Self {
         let end = memory.len();
-        Self { marker: end, pointer: end, memory }
+        Self { marker: end, pointer: end }
     }
+
     /// does not guarantee that pointer points to a readable position
-    fn inc(&mut self) -> ScannerValue {
-        if self.pointer == self.memory.len() {
+    fn inc(&mut self, memory: &BlockMemory) -> ScannerValue {
+        if self.pointer == memory.len() {
             return ScannerValue::Eof;
         }
         self.pointer += 1;
-        if self.pointer == self.memory.len() {
+        if self.pointer == memory.len() {
             ScannerValue::Eof
         } else {
-            Self::val_from_option(self.memory.blocks[self.pointer])
+            Self::val_from_option(memory.blocks[self.pointer])
         }
     }
 
-    fn peek_dec(&self) -> ScannerValue {
+    fn peek_dec(&self, memory: &BlockMemory) -> ScannerValue {
         if self.pointer == 0 {
             return ScannerValue::Eof;
         }
-        Self::val_from_option(self.memory.blocks[self.pointer - 1])
+        Self::val_from_option(memory.blocks[self.pointer - 1])
     }
 
-    fn dec(&mut self) -> ScannerValue {
+    fn dec(&mut self, memory: &BlockMemory) -> ScannerValue {
         self.pointer -=1;
-        Self::val_from_option(self.memory.blocks[self.pointer])
+        Self::val_from_option(memory.blocks[self.pointer])
     }
 
 
@@ -122,25 +123,25 @@ impl<'a> Scanner<'a> {
         (self.marker as i32 - self.pointer as i32).abs() as usize
     }
 
-    fn read(&self) -> Option<FileID> {
-        self.memory.blocks[self.pointer]
+    fn read(&self, memory: &BlockMemory) -> Option<FileID> {
+        memory.blocks[self.pointer]
     }
 }
 
 
-struct FreeSpaceScanner<'a> {
-    scanner: Scanner<'a>, 
+struct FreeSpaceScanner {
+    scanner: Scanner, 
 }
 
-impl<'a> FreeSpaceScanner<'a> {
-    fn new(memory: &'a BlockMemory) -> Self {
-        Self { scanner: Scanner::start(memory) }
+impl FreeSpaceScanner {
+    fn new(memory: & BlockMemory) -> Self {
+        Self { scanner: Scanner::start() }
     }
 
-    fn next(&mut self) -> Option<(usize, usize)> {
+    fn next(&mut self, memory: &BlockMemory) -> Option<(usize, usize)> {
         // seek to next freespace
         loop {
-            let value = self.scanner.inc();
+            let value = self.scanner.inc(memory);
             if let ScannerValue::Eof = value { return None }; // reached end of memory
             if let ScannerValue::Free = value { break; } // found freespace
         }
@@ -150,7 +151,7 @@ impl<'a> FreeSpaceScanner<'a> {
 
         // move past freespace
         loop {
-            match self.scanner.inc(){
+            match self.scanner.inc(memory) {
                 ScannerValue::Free => continue,
                 _ => break,
             };
@@ -160,21 +161,21 @@ impl<'a> FreeSpaceScanner<'a> {
     }
 }
 
-struct FileScanner<'a> {
-    scanner: Scanner<'a>,
+struct FileScanner {
+    scanner: Scanner,
 }
 
-impl <'a> FileScanner<'a> {
-    fn new(memory: &'a BlockMemory) -> Self {
+impl FileScanner {
+    fn new(memory: & BlockMemory) -> Self {
         Self { scanner: Scanner::end(memory) }
     }
 
-    fn next(&mut self) -> Option<(FileID, (usize, usize))> {
+    fn next(&mut self, memory: &BlockMemory) -> Option<(FileID, (usize, usize))> {
         // seek to file
         loop {
-            match self.scanner.peek_dec() {
+            match self.scanner.peek_dec(memory) {
                 ScannerValue::Eof => return None,
-                ScannerValue::Free => { self.scanner.dec(); } ,
+                ScannerValue::Free => { self.scanner.dec(memory); } ,
                 ScannerValue::File(_) => break,
             }
         }
@@ -183,13 +184,13 @@ impl <'a> FileScanner<'a> {
 
         // move to start of file
         loop {
-            match self.scanner.peek_dec() {
-                ScannerValue::File(_) => { self.scanner.dec(); },
+            match self.scanner.peek_dec(memory) {
+                ScannerValue::File(_) => { self.scanner.dec(memory); },
                 _ => { break; },
             }
         }
 
-        let file_id = self.scanner.read().unwrap();
+        let file_id = self.scanner.read(memory).unwrap();
         Some((file_id, (self.scanner.pointer, self.scanner.marker)))
     }
 }
@@ -229,21 +230,21 @@ mod tests {
     fn test_free_space_scanner() {
         let memory = BlockMemory::parse("12345");
         let mut free_space_scanner = FreeSpaceScanner::new(&memory);
-        assert_eq!(free_space_scanner.next(), Some((1, 3)));
-        assert_eq!(free_space_scanner.next(), Some((6, 10)));
-        assert_eq!(free_space_scanner.next(), None);
-        assert_eq!(free_space_scanner.next(), None);
+        assert_eq!(free_space_scanner.next(&memory), Some((1, 3)));
+        assert_eq!(free_space_scanner.next(&memory), Some((6, 10)));
+        assert_eq!(free_space_scanner.next(&memory), None);
+        assert_eq!(free_space_scanner.next(&memory), None);
     }
 
     #[test]
     fn test_file_scanner() {
         let memory = BlockMemory::parse("12345");
         let mut file_scanner = FileScanner::new(&memory);
-        assert_eq!(file_scanner.next(), Some((2, (10, 15))));
-        assert_eq!(file_scanner.next(), Some((1, (3, 6))));
-        assert_eq!(file_scanner.next(), Some((0, (0, 1))));
-        assert_eq!(file_scanner.next(), None);
-        assert_eq!(file_scanner.next(), None);
+        assert_eq!(file_scanner.next(&memory), Some((2, (10, 15))));
+        assert_eq!(file_scanner.next(&memory), Some((1, (3, 6))));
+        assert_eq!(file_scanner.next(&memory), Some((0, (0, 1))));
+        assert_eq!(file_scanner.next(&memory), None);
+        assert_eq!(file_scanner.next(&memory), None);
     }
 }
 
