@@ -30,6 +30,35 @@ impl BlockMemory {
     fn len(&self) -> usize {
         self.blocks.len()
     }
+
+    fn compress(&mut self) {
+        loop {
+            let mut file_scanner = FileScanner::new(self);
+            let mut freespace_scanner = FreeSpaceScanner::new(self);
+
+            // loop over files
+            'file: loop {
+                let Some(file) = file_scanner.next() else { break; };
+
+                // loop over freespace
+                'freespace: loop {
+                    let Some(freespace) = freespace_scanner.next() else { break; };
+
+                    let file_len = file.1.1 - file.1.0;
+                    let freespace_len = freespace.1 - freespace.0;
+
+                    if file_len > freespace_len {
+                        continue;    
+                    }
+
+                    // perform swap
+                    for i in freespace.0..freespace.1 {
+                        
+                    }
+                }
+            }
+        }
+    }
 }
 
 enum ScannerValue {
@@ -204,6 +233,17 @@ mod tests {
         assert_eq!(free_space_scanner.next(), Some((6, 10)));
         assert_eq!(free_space_scanner.next(), None);
         assert_eq!(free_space_scanner.next(), None);
+    }
+
+    #[test]
+    fn test_file_scanner() {
+        let memory = BlockMemory::parse("12345");
+        let mut file_scanner = FileScanner::new(&memory);
+        assert_eq!(file_scanner.next(), Some((2, (10, 15))));
+        assert_eq!(file_scanner.next(), Some((1, (3, 6))));
+        assert_eq!(file_scanner.next(), Some((0, (0, 1))));
+        assert_eq!(file_scanner.next(), None);
+        assert_eq!(file_scanner.next(), None);
     }
 }
 
