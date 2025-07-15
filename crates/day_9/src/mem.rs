@@ -45,8 +45,12 @@ struct Scanner<'a> {
 }
 
 impl<'a> Scanner<'a> {
-    fn new(pointer: usize, memory: &'a BlockMemory) -> Self {
-        Self { marker: pointer, pointer, memory }
+    fn start(memory: &'a BlockMemory) -> Self {
+        Self { marker: 0, pointer: 0, memory }
+    }
+    fn end(memory: &'a BlockMemory) -> Self {
+        let end = memory.len();
+        Self { marker: end, pointer: end, memory }
     }
     /// does not guarantee that pointer points to a readable position
     fn inc(&mut self) -> ScannerValue {
@@ -60,6 +64,19 @@ impl<'a> Scanner<'a> {
             Self::val_from_option(self.memory.blocks[self.pointer])
         }
     }
+
+    fn peek_dec(&self) -> ScannerValue {
+        if self.pointer == 0 {
+            return ScannerValue::Eof;
+        }
+        Self::val_from_option(self.memory.blocks[self.pointer - 1])
+    }
+
+    fn dec(&mut self) -> ScannerValue {
+        self.pointer -=1;
+        Self::val_from_option(self.memory.blocks[self.pointer])
+    }
+
 
     fn val_from_option(val: Option<FileID>) -> ScannerValue {
         match val {
@@ -75,6 +92,10 @@ impl<'a> Scanner<'a> {
     fn diff(&mut self) -> usize {
         (self.marker as i32 - self.pointer as i32).abs() as usize
     }
+
+    fn read(&self) -> Option<FileID> {
+        self.memory.blocks[self.pointer]
+    }
 }
 
 
@@ -84,7 +105,7 @@ struct FreeSpaceScanner<'a> {
 
 impl<'a> FreeSpaceScanner<'a> {
     fn new(memory: &'a BlockMemory) -> Self {
-        Self { scanner: Scanner::new(0, memory) }
+        Self { scanner: Scanner::start(memory) }
     }
 
     fn next(&mut self) -> Option<(usize, usize)> {
@@ -107,6 +128,40 @@ impl<'a> FreeSpaceScanner<'a> {
         }
 
         Some((self.scanner.marker, self.scanner.pointer))
+    }
+}
+
+struct FileScanner<'a> {
+    scanner: Scanner<'a>,
+}
+
+impl <'a> FileScanner<'a> {
+    fn new(memory: &'a BlockMemory) -> Self {
+        Self { scanner: Scanner::end(memory) }
+    }
+
+    fn next(&mut self) -> Option<(FileID, (usize, usize))> {
+        // seek to file
+        loop {
+            match self.scanner.peek_dec() {
+                ScannerValue::Eof => return None,
+                ScannerValue::Free => { self.scanner.dec(); } ,
+                ScannerValue::File(_) => break,
+            }
+        }
+
+        self.scanner.mark();
+
+        // move to start of file
+        loop {
+            match self.scanner.peek_dec() {
+                ScannerValue::File(_) => { self.scanner.dec(); },
+                _ => { break; },
+            }
+        }
+
+        let file_id = self.scanner.read().unwrap();
+        Some((file_id, (self.scanner.pointer, self.scanner.marker)))
     }
 }
 
@@ -147,6 +202,7 @@ mod tests {
         let mut free_space_scanner = FreeSpaceScanner::new(&memory);
         assert_eq!(free_space_scanner.next(), Some((1, 3)));
         assert_eq!(free_space_scanner.next(), Some((6, 10)));
+        assert_eq!(free_space_scanner.next(), None);
         assert_eq!(free_space_scanner.next(), None);
     }
 }
