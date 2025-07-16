@@ -5,19 +5,18 @@ pub struct BlockMemory {
 }
 
 impl BlockMemory {
-    fn parse(input: &str) -> Self {
+    pub fn parse(input: &str) -> Self {
         let mut blocks = vec![];
         for (i, c) in input.chars().enumerate() {
             let is_file = i % 2 == 0;
             let value = if is_file {
                 let file_id: FileID = i as FileID / 2;
-                dbg!(file_id, i);
                 Some(file_id)
             } else {
                 None
             };
 
-            let length = c.to_digit(10).expect("failed to parse digit from '{c}'"); // radix = 10
+            let length = c.to_digit(10).expect(format!("failed to parse digit from '{c}'").as_str()); // radix = 10
             for i in 0..length {
                 blocks.push(value);
             }
@@ -27,40 +26,84 @@ impl BlockMemory {
         }
     }
 
+    fn to_string(&self) -> String {
+        let mut s = String::new();
+        for item in self.blocks.iter() {
+            let c = match item {
+                Some(file_id) => ('0' as u8 + *file_id as u8) as char,
+                None => '.',
+            };
+            s.push(c);
+        }
+        s
+    }
+
+    fn print(&self) {
+        println!("{}", self.to_string());
+    }
+
     fn len(&self) -> usize {
         self.blocks.len()
     }
 
-    fn compress(&mut self) {
-        loop {
-            let mut file_scanner = FileScanner::new(self);
+    pub fn compress(&mut self) {
+        let mut file_scanner = FileScanner::new(self);
+
+        // loop over files
+        let largest_file_id = self.blocks[self.blocks.len()-1].unwrap();
+        'file:  for file_id in (0..=largest_file_id).rev() {
+            let Some(file) = file_scanner.next(self, file_id) else {
+                println!("breaking!");
+                break;
+            };
+            // file 0 never needs to be moved
+            if file.0 == 0 {
+                break;
+            }
+            println!("attempting to swap file {}", file.0);
             let mut freespace_scanner = FreeSpaceScanner::new(self);
 
-            // loop over files
-            'file: loop {
-                let Some(file) = file_scanner.next(self) else { break; };
+            // loop over freespace
+            'freespace: loop {
+                let Some(freespace) = freespace_scanner.next(self) else { break; };
 
-                // loop over freespace
-                'freespace: loop {
-                    let Some(freespace) = freespace_scanner.next(self) else { break; };
+                let file_len = file.1.1 - file.1.0;
+                let freespace_len = freespace.1 - freespace.0;
 
-                    let file_len = file.1.1 - file.1.0;
-                    let freespace_len = freespace.1 - freespace.0;
-
-                    if file_len > freespace_len {
-                        continue;    
-                    }
-
-                    // perform swap
-                    for i in freespace.0..freespace.1 {
-                        
-                    }
+                if file_len > freespace_len {
+                    continue;    
                 }
+
+                // don't swap to the right
+                if freespace.0 > file.1.0 {
+                    continue;
+                }
+
+                // perform swap
+                let file_id = file.0;
+                println!("performing swap on file {file_id}: {} {}", freespace.0, file_len);
+                for i in 0..file_len {
+                    self.blocks[freespace.0 + i] = Some(file_id);
+                }
+                for i in file.1.0..file.1.1 {
+                    self.blocks[i] = None;
+                }
+
+                continue 'file; // we swapped the file! go to the outer loop
             }
         }
     }
+
+    pub fn checksum(&self) -> i64 {
+        let mut sum = 0i64;
+        for i in 0..self.blocks.len() {
+            sum += self.blocks[i].unwrap_or(0) as i64 * i as i64;
+        }
+        sum
+    }
 }
 
+#[derive(Clone, Copy, Debug)]
 enum ScannerValue {
     File(FileID),
     Free,
@@ -170,22 +213,22 @@ impl FileScanner {
         Self { scanner: Scanner::end(memory) }
     }
 
-    fn next(&mut self, memory: &BlockMemory) -> Option<(FileID, (usize, usize))> {
+    fn next(&mut self, memory: &BlockMemory, file_id: FileID) -> Option<(FileID, (usize, usize))> {
         // seek to file
-        loop {
+        let curr_file_id = loop {
             match self.scanner.peek_dec(memory) {
                 ScannerValue::Eof => return None,
-                ScannerValue::Free => { self.scanner.dec(memory); } ,
-                ScannerValue::File(_) => break,
-            }
-        }
+                ScannerValue::File(f) if f == file_id => break file_id,
+                _ => self.scanner.dec(memory),
+            };
+        };
 
-        self.scanner.mark();
+        dbg!(self.scanner.mark(), self.scanner.marker);
 
         // move to start of file
         loop {
             match self.scanner.peek_dec(memory) {
-                ScannerValue::File(_) => { self.scanner.dec(memory); },
+                ScannerValue::File(file_id) if file_id == curr_file_id => { self.scanner.dec(memory); },
                 _ => { break; },
             }
         }
@@ -240,11 +283,56 @@ mod tests {
     fn test_file_scanner() {
         let memory = BlockMemory::parse("12345");
         let mut file_scanner = FileScanner::new(&memory);
-        assert_eq!(file_scanner.next(&memory), Some((2, (10, 15))));
-        assert_eq!(file_scanner.next(&memory), Some((1, (3, 6))));
-        assert_eq!(file_scanner.next(&memory), Some((0, (0, 1))));
-        assert_eq!(file_scanner.next(&memory), None);
-        assert_eq!(file_scanner.next(&memory), None);
+        assert_eq!(file_scanner.next(&memory, 2), Some((2, (10, 15))));
+        assert_eq!(file_scanner.next(&memory, 1), Some((1, (3, 6))));
+        assert_eq!(file_scanner.next(&memory, 0), Some((0, (0, 1))));
+        assert_eq!(file_scanner.next(&memory, 0), None);
+        assert_eq!(file_scanner.next(&memory, 0), None);
+    }
+
+    #[test]
+    fn test_checksum() {
+        let memory = BlockMemory::parse("12345");
+        assert_eq!(memory.checksum(), 1 * (3 + 4 + 5) + 2 * (10 + 11 + 12 + 13 + 14));
+    }
+
+    #[test]
+    fn test_example() {
+        let mut memory = BlockMemory::parse("2333133121414131402");
+        assert_eq!(memory.to_string(), "00...111...2...333.44.5555.6666.777.888899");
+
+        memory.print();
+
+        dbg!(memory.to_string().len());
+
+        let mut file_scanner = FileScanner::new(&memory);
+        assert_eq!(file_scanner.next(&memory, 9), Some((9, (40, 42))));
+        assert_eq!(file_scanner.next(&memory, 8), Some((8, (36, 40))));
+        assert_eq!(file_scanner.next(&memory, 7), Some((7, (32, 35))));
+        assert_eq!(file_scanner.next(&memory, 6), Some((6, (27, 31))));
+        assert_eq!(file_scanner.next(&memory, 5), Some((5, (22, 26))));
+        assert_eq!(file_scanner.next(&memory, 4), Some((4, (19, 21))));
+        assert_eq!(file_scanner.next(&memory, 3), Some((3, (15, 18))));
+        assert_eq!(file_scanner.next(&memory, 2), Some((2, (11, 12))));
+        assert_eq!(file_scanner.next(&memory, 1), Some((1, (5, 8))));
+        assert_eq!(file_scanner.next(&memory, 0), Some((0, (0, 2))));
+        assert_eq!(file_scanner.next(&memory, 0), None);
+
+        memory.compress();
+
+        assert_eq!(memory.to_string(), "00992111777.44.333....5555.6666.....8888..");
+        // assert_eq!(file_scanner.next(&memory), Some((9, (40, 42))));
+        // assert_eq!(file_scanner.next(&memory), Some((8, (36, 40))));
+        // assert_eq!(file_scanner.next(&memory), Some((7, (32, 35))));
+        // assert_eq!(file_scanner.next(&memory), Some((6, (27, 31))));
+        // assert_eq!(file_scanner.next(&memory), Some((5, (22, 26))));
+        // assert_eq!(file_scanner.next(&memory), Some((4, (19, 21))));
+        // assert_eq!(file_scanner.next(&memory), Some((3, (15, 18))));
+        // assert_eq!(file_scanner.next(&memory), Some((2, (11, 12))));
+        // assert_eq!(file_scanner.next(&memory), Some((1, (5, 8))));
+        // assert_eq!(file_scanner.next(&memory), Some((0, (0, 2))));
+
+        assert_eq!(memory.checksum(), 2858);
     }
 }
 
