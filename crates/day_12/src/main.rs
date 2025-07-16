@@ -45,10 +45,10 @@ fn add(pos: (i32, i32), direction: (i32, i32)) -> (i32, i32) {
 }
 
 fn dfs(row: usize, col: usize, garden: &mut Vec<Vec<char>>) -> Specs {
-    let curr = garden[col][row];
+    let curr = garden[row][col];
 
     // prevent visiting the same spot twice
-    garden[col][row] = curr.to_ascii_lowercase();
+    garden[row][col] = curr.to_ascii_lowercase();
 
     let mut perimeter = 0;
     let mut sides = 0;
@@ -57,7 +57,7 @@ fn dfs(row: usize, col: usize, garden: &mut Vec<Vec<char>>) -> Specs {
     for (dx, dy) in DIRECTIONS {
         let new_row = (row as i32 + dx) as usize;
         let new_col = (col as i32 + dy) as usize;
-        let peek = garden[new_col][new_row];
+        let peek = garden[new_row][new_col];
         if curr == peek {
             let specs = dfs(new_row, new_col, garden);
             perimeter += specs.perimeter;
@@ -99,9 +99,9 @@ fn dfs(row: usize, col: usize, garden: &mut Vec<Vec<char>>) -> Specs {
 
 fn dfs_entry(garden: &mut Vec<Vec<char>>) -> HashMap<char, Vec<Specs>> {
     let mut agg = HashMap::new();
-    for col in 0..garden.len() {
-        for row in 0..garden[col].len() {
-            let curr = garden[col][row];
+    for row in 0..garden.len() {
+        for col in 0..garden[row].len() {
+            let curr = garden[row][col];
             if curr == '.' || curr.is_lowercase() {
                 continue;
             }
