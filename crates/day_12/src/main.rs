@@ -1,6 +1,6 @@
 use advent_of_code_2024::aoc;
 use itertools::Itertools;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 fn parse_input(input: &str) -> Vec<Vec<char>> {
     let mut garden = input.lines().map(|line| line.chars().collect_vec()).collect_vec();
@@ -14,7 +14,7 @@ fn parse_input(input: &str) -> Vec<Vec<char>> {
 }
 
 fn main() {
-    let input = include_str!("example.txt");
+    let input = include_str!("input.txt");
     aoc::run_parts(input, part_1, part_2);
 }
 
@@ -53,10 +53,18 @@ fn add(pos: (i32, i32), direction: (i32, i32)) -> (i32, i32) {
     (pos.0 + direction.0, pos.1 + direction.1)
 }
 
-fn dfs(row: usize, col: usize, garden: &mut Vec<Vec<char>>) -> Specs {
+fn bfs(row: usize, col: usize, garden: &mut Vec<Vec<char>>, queue: &mut VecDeque<(usize, usize)>) -> Specs {
     let curr = garden[row][col];
+    if curr.is_lowercase() {
+        return Specs {
+            sides: 0,
+            area: 0,
+            perimeter: 0,
+        }
+    }
 
-    // prevent visiting the same spot twice
+    // Prevent visiting the same spot twice, by setting the char to lowercase.
+    // We can then check if it's been visited in the future.
     let lower = curr.to_ascii_lowercase();
     garden[row][col] = lower;
 
@@ -64,23 +72,23 @@ fn dfs(row: usize, col: usize, garden: &mut Vec<Vec<char>>) -> Specs {
     let mut sides = 0;
     let mut area = 1;
 
-    // do sides first
+    // Count undiscovered sides:
     for (dx, dy) in DIRECTIONS {
         let new_row = (row as i32 + dx) as usize;
         let new_col = (col as i32 + dy) as usize;
         let peek = garden[new_row][new_col];
         if peek != curr && peek != lower {
-            // check if it's a new side
-            // there will be two possible locations of perimeter pieces of the same side which may have already been discovered
+            // Check if it's a new side;
+            // There will be two possible locations of perimeter pieces of the
+            // same side which may have already been discovered:
             //
             //    | <-
             // -> |
             //    | <-
             //
-            // if they have already been discovered, then one of the two spots adjacent to that perimeter piece will have been visited
-
-            //let spot_1 = (row
-
+            // If they have already been discovered, then one of the two spots
+            // adjacent to that perimeter piece will have been visited (and of
+            // same character case-insensitive).
             let pos = (row as i32, col as i32);
             let direction = (dx, dy);
             let a = add(pos, turn(direction));
@@ -91,17 +99,12 @@ fn dfs(row: usize, col: usize, garden: &mut Vec<Vec<char>>) -> Specs {
             let bg = garden[b.0 as usize][b.1 as usize];
             let cg = garden[c.0 as usize][c.1 as usize];
             let dg = garden[d.0 as usize][d.1 as usize];
-            let previously_discovered_side = (ag == lower && (bg != curr && bg != lower))
-                || (cg == lower && (dg != curr && dg != lower));
-
-            // println!("{} {} {} {}", ag, bg, cg, dg);
+            let previously_discovered_side =
+                (ag == lower && (bg != curr && bg != lower)) ||
+                (cg == lower && (dg != curr && dg != lower));
 
             if !previously_discovered_side {
-                println!("O {}, ({:?}) -> {:?}) [{curr}, {lower}]", garden[row][col], pos, direction);
-                print(garden);
                 sides += 1;
-            } else {
-                println!("X {}, ({:?}) -> {:?}) [{curr}, {lower}]", garden[row][col], pos, direction);
             }
         }
     }
@@ -111,32 +114,51 @@ fn dfs(row: usize, col: usize, garden: &mut Vec<Vec<char>>) -> Specs {
         let new_col = (col as i32 + dy) as usize;
         let peek = garden[new_row][new_col];
         if curr == peek {
-            // explore
-            let specs = dfs(new_row, new_col, garden);
-            perimeter += specs.perimeter;
-            area += specs.area;
-            sides += specs.sides;
+            // visit all other spots of same name
+            queue.push_back((new_row, new_col));
         } else if peek != lower {
             // hit wall to the outside of the group
             perimeter += 1;
        }
     }
 
-    // dbg!(curr, sides);
-
     Specs { area, perimeter, sides }
 }
 
-fn dfs_entry(garden: &mut Vec<Vec<char>>) -> HashMap<char, Vec<Specs>> {
+fn bfs_entry(garden: &mut Vec<Vec<char>>) -> HashMap<char, Vec<Specs>> {
     let mut agg = HashMap::new();
+    let mut queue = VecDeque::new();
+
+    // iterate all points
     for row in 0..garden.len() {
         for col in 0..garden[row].len() {
+
+            // check if visited
             let curr = garden[row][col];
             if curr == '.' || curr.is_lowercase() {
                 continue;
             }
-            let specs = dfs(row, col, garden);
-            agg.entry(curr).or_insert(vec![]).push(specs);
+
+            // perform breadth first search
+            // agg the specs while in same group
+            let mut agg_specs = Specs {
+                sides: 0,
+                perimeter: 0,
+                area: 0,
+            };
+            queue.push_back((row, col));
+            while queue.len() > 0 {
+                let pos = queue.pop_front().unwrap();
+                let specs =
+                    bfs(pos.0, pos.1, garden, &mut queue);
+                agg_specs = Specs {
+                    sides: agg_specs.sides + specs.sides,
+                    area: agg_specs.area + specs.area,
+                    perimeter: agg_specs.perimeter + specs.perimeter,
+                };
+            }
+
+            agg.entry(curr).or_insert(vec![]).push(agg_specs);
         }
     }
     agg
@@ -144,24 +166,21 @@ fn dfs_entry(garden: &mut Vec<Vec<char>>) -> HashMap<char, Vec<Specs>> {
 
 
 fn part_1(input: &str) -> i32 {
-0
-    // let mut garden = parse_input(input);
-    // let agg = dfs_entry(&mut garden);
-    // let mut sum = 0;
-    // dbg!(&agg);
-    // for (_, groups) in agg.iter() {
-    //     for group in groups.iter() {
-    //         sum += group.area * group.perimeter;
-    //     }
-    // }
-    // sum
+    let mut garden = parse_input(input);
+    let agg = bfs_entry(&mut garden);
+    let mut sum = 0;
+    for (_, groups) in agg.iter() {
+        for group in groups.iter() {
+            sum += group.area * group.perimeter;
+        }
+    }
+    sum
 }
 
 fn part_2(input: &str) -> i32 {
     let mut garden = parse_input(input);
-    let agg = dfs_entry(&mut garden);
+    let agg = bfs_entry(&mut garden);
     let mut sum = 0;
-    dbg!(&agg);
     for (_, groups) in agg.iter() {
         for group in groups.iter() {
             sum += group.area * group.sides;
