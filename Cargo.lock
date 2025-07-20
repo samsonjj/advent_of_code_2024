@@ -57,6 +57,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "day_14"
+version = "0.1.0"
+dependencies = [
+ "advent_of_code_2024",
+ "itertools",
+ "regex",
+]
+
+[[package]]
 name = "day_2"
 version = "0.1.0"
 dependencies = [
