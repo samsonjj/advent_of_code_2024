@@ -50,6 +50,15 @@ impl std::ops::Add<(usize, usize)> for Direction {
     }
 }
 
+impl Direction {
+    fn sub_from(self, other: (usize, usize)) -> (usize, usize) {
+        let (dx, dy) = self.deltas();
+        let x = (other.0 as i64 - dx) as usize;
+        let y = (other.1 as i64 - dy) as usize;
+        (x, y)
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 struct State {
     pos: (usize, usize),
@@ -130,29 +139,39 @@ impl Maze {
     }
     fn search(
         &self,
-    ) -> (i64, HashMap<(usize, usize), Direction>) {
+    ) -> (i64, HashMap<(usize, usize), Direction>, HashMap<(usize, usize), Vec<(usize, usize)>>, (usize, usize)) {
         // map of state -> cost
         let mut visited: HashMap<State, i64> = HashMap::new();
         let mut queue: BinaryHeap<StateCost> = BinaryHeap::new();
         let mut paths: HashMap<(usize, usize), Direction> = HashMap::new();
+        // store the preceeding tiles which can reach each tile via the same cost
+        let mut paths2: HashMap<(usize, usize), Vec<(usize, usize)>> = HashMap::new();
 
         let start_state = State { pos: self.start, dir: Direction::East };
         let start_state_cost = StateCost { state: start_state, cost: 0 };
-        visited.insert(start_state, 0);
-        paths.insert(start_state.pos, Direction::East);
         queue.push(start_state_cost);
 
         loop {
             let curr_state = queue.pop().unwrap();
 
-            // if (visited.contains_key(&curr_state.state) {
-            //     continue;
-            // }
+            if visited.contains_key(&curr_state.state) {
+                let prev_cost = visited.get(&curr_state.state).unwrap();
+                // alternative path with same cost
+                if *prev_cost == curr_state.cost {
+                    let entry = paths2.entry(curr_state.state.pos).or_insert_with(|| panic!());
+                    (*entry).push(curr_state.state.dir.sub_from(curr_state.state.pos));
+                }
+                continue;
+            }
 
-            // visited.insert(state_cost.state);
+            visited.insert(curr_state.state, curr_state.cost);
+            paths.insert(curr_state.state.pos, curr_state.state.dir);
+            let entry = paths2.entry(curr_state.state.pos).or_insert(vec![]);
+            (*entry).push(curr_state.state.dir.sub_from(curr_state.state.pos));
+
 
             if self.get(curr_state.state.pos) == 'E' {
-                return (curr_state.cost, paths);
+                return (curr_state.cost, paths, paths2, curr_state.state.pos);
             }
 
             let next_states = vec![
@@ -166,12 +185,12 @@ impl Maze {
 
             for state_cost in next_states.into_iter() {
                 queue.push(state_cost.clone());
-                visited.insert(state_cost.state, state_cost.cost);
-                if !paths.contains_key(&state_cost.state.pos) {
-                    paths.insert(state_cost.state.pos, state_cost.state.dir);
-                }
             }
         }
+    }
+
+    fn count_seats(end: (usize, usize), paths: HashMap<(usize, usize), Vec<(usize, usize)>>) {
+
     }
 }
 
@@ -218,7 +237,7 @@ fn main() {
 
 fn part_1(input: &str) -> i64 {
     let maze = parse_input(input);
-    let (result, paths) = maze.search();
+    let (result, paths, _paths2, _end) = maze.search();
     display(&maze, &paths);
     result
 }
@@ -288,8 +307,12 @@ mod tests {
         binary_heap.push(StateCost::new((4, 0), Direction::East, 8));
         binary_heap.push(StateCost::new((4, 0), Direction::East, 7));
 
+        assert_eq!(binary_heap.pop().unwrap(), StateCost::new((4, 0), Direction::East, 7));
+        assert_eq!(binary_heap.pop().unwrap(), StateCost::new((4, 0), Direction::East, 8));
+        assert_eq!(binary_heap.pop().unwrap(), StateCost::new((3, 0), Direction::East, 9));
+        assert_eq!(binary_heap.pop().unwrap(), StateCost::new((4, 0), Direction::East, 9));
         assert_eq!(binary_heap.pop().unwrap(), StateCost::new((1, 0), Direction::East, 10));
-        assert_eq!(binary_heap.pop().unwrap(), StateCost::new((2, 0), Direction::East, 10));
         assert_eq!(binary_heap.pop().unwrap(), StateCost::new((4, 0), Direction::East, 10));
+        assert_eq!(binary_heap.pop().unwrap(), StateCost::new((2, 0), Direction::East, 10));
     }
 }
