@@ -1,5 +1,6 @@
 use advent_of_code_2024::aoc;
 use itertools::Itertools;
+use std::collections::HashSet;
 use regex::Regex;
 
 #[derive(Copy, Clone, Debug)]
@@ -42,6 +43,7 @@ struct Computer {
     instruction_pointer: usize,
     registers: [i64; 3],
     program: Vec<i64>,
+    cache: HashSet<(usize, i64, i64, i64)>
 }
 
 impl Computer {
@@ -85,6 +87,7 @@ impl Computer {
             instruction_pointer: 0,
             registers: [a, b, c],
             program,
+            cache: HashSet::new(),
         }
     }
 
@@ -202,8 +205,30 @@ impl Computer {
             if let Some(output_val) = self.execute(instruction, operand) {
                 output.push(output_val);
             }
-            dbg!(instruction, operand);
-            dbg!(self.registers);
+
+            let cache_key = (
+                self.instruction_pointer,
+                self.read_register(Register::A),
+                self.read_register(Register::B),
+                self.read_register(Register::C),
+            );
+
+            // if self.cache.contains(&cache_key) {
+            //     // in infinite loop
+            //     output.push(12142897); // push garbage to make sure it doesn't match the program
+            //     break;
+            // }
+            // self.cache.insert(cache_key);
+
+            // check output
+            if output.len() > 0 {
+                if output.len() > self.program.len() {
+                    break;
+                }
+                if output[output.len() - 1] != self.program[output.len() - 1] {
+                    break;
+                }
+            }
         }
 
         output
@@ -217,9 +242,7 @@ fn main() {
 
 fn part_1(input: &str) -> String {
     let mut computer = Computer::from_input(input);
-    dbg!(&computer);
     let output = computer.run();
-    dbg!(&output);
     output
         .iter()
         .map(|x| format!("{x}"))
@@ -228,7 +251,24 @@ fn part_1(input: &str) -> String {
 }
 
 fn part_2(input: &str) -> String {
-    "hi".to_string()
+    let mut computer = Computer::from_input(input);
+    let mut last = 0;
+    let mut x = 2977469;
+    let mut i = 0;
+    // discoverd a pattern which yields values which result in longer chains
+    // of similar programs. 
+    let increments = [256, 2427384, 1766664, 256, 4194048];
+    for i in 0..100_000_000usize {
+        let mut computer = computer.clone();
+        computer.write_register(Register::A, x);
+        let output = computer.run();
+        if output == computer.program {
+            return format!("{x}");
+        }
+
+        x += increments[i % increments.len()];
+    }
+    unreachable!();
 }
 
 #[cfg(test)]
