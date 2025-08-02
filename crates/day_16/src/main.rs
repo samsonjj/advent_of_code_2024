@@ -2,7 +2,7 @@
 
 use advent_of_code_2024::aoc;
 use itertools::Itertools;
-use std::collections::{HashMap, BinaryHeap};
+use std::collections::{HashMap, BinaryHeap, HashSet};
 
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
@@ -14,6 +14,15 @@ enum Direction {
 }
 
 impl Direction {
+    fn from_delta(delta: (i64, i64)) -> Self {
+        match delta {
+            (-1, 0) => Direction::North,
+            (1, 0) => Direction::South,
+            (0, -1) => Direction::West,
+            (0, 1) => Direction::East,
+            x => panic!("{x:?}"),
+        }
+    }
     fn deltas(&self) -> (i64, i64) {
         match self {
             Direction::North => (-1, 0),
@@ -133,10 +142,101 @@ struct Maze {
     start: (usize, usize),
 }
 
+#[derive(Clone, Debug)]
+struct Edge {
+    prev: State,
+    next: State,
+}
+
+#[derive(Clone, Debug)]
+struct EdgeCost {
+    edge: Edge,
+    cost: i64,
+}
+
+const TURN_COST: i64 = 1000;
+const STEP_COST: i64 = 1;
+
+impl EdgeCost {
+
+    pub fn turnC(&self) -> Self {
+        let mut result = self.clone();
+        result.cost += TURN_COST;
+        result.edge.prev = result.edge.next;
+        result.edge.next.dir.turnC();
+        result
+    }
+    pub fn turnCC(&self) -> Self {
+        let mut result = self.clone();
+        result.cost += TURN_COST;
+        result.edge.prev = result.edge.next;
+        result.edge.next.dir.turnCC();
+        result
+    }
+    pub fn step(&self) -> Self {
+        let mut result = self.clone();
+        result.cost += STEP_COST;
+        result.edge.prev = result.edge.next;
+        result.edge.next.pos = result.edge.next.dir + result.edge.next.pos;
+        result
+    }
+}
+
+type EdgeCostStore = HashMap<State, Vec<EdgeCost>>;
+
 impl Maze {
     fn get(&self, pos: (usize, usize)) -> char {
         self.map[pos.0][pos.1]
     }
+
+    fn search2(&self) -> (i64, EdgeCostStore) {
+        let mut paths: EdgeCostStore = HashMap::new();
+        let mut queue: Vec<EdgeCost> = vec![];
+
+        // init start state
+        let start_state = State { pos: self.start, dir: Direction::East };
+        queue.push(
+            EdgeCost { edge: Edge { prev: start_state, next: start_state }, cost: 0 },
+        );
+
+        loop {
+            queue.sort_by(|a, b| b.cost.cmp(&a.cost));
+            let edge_cost = queue.pop().unwrap();
+            let EdgeCost { edge: Edge { prev, next }, cost } = edge_cost;
+
+            // visited
+            if let Some(edges) = paths.get(&next) {
+                let acceptable_cost = edges.first().unwrap().cost;
+                if cost == acceptable_cost {
+                    paths.get_mut(&next).unwrap().push(edge_cost.clone());
+                }
+                continue; // TODO
+            }
+            
+            // unvisited
+            // dbg!(&edge_cost);
+            paths.insert(next, vec![edge_cost.clone()]);
+
+            if self.get(next.pos) == 'E' {
+                return (cost, paths);
+            }
+
+            let next_edge_costs = vec![
+                edge_cost.turnC(),
+                edge_cost.turnCC(),
+                edge_cost.step(),
+            ].into_iter()
+                .filter(|edge_cost| !paths.contains_key(&edge_cost.edge.next))
+                .filter(|edge_cost| self.get(edge_cost.edge.next.pos) != '#')
+                .collect_vec();
+
+            for edge_cost in next_edge_costs.into_iter() {
+                dbg!(&edge_cost);
+                queue.push(edge_cost);
+            }
+        }
+    }
+
     fn search(
         &self,
     ) -> (i64, HashMap<(usize, usize), Direction>, HashMap<(usize, usize), Vec<(usize, usize)>>, (usize, usize)) {
@@ -189,8 +289,18 @@ impl Maze {
         }
     }
 
-    fn count_seats(end: (usize, usize), paths: HashMap<(usize, usize), Vec<(usize, usize)>>) {
-
+    fn count_seats(&self, state: State, paths: &EdgeCostStore, seats: &mut HashSet<(usize, usize)>, i: i64) {
+        let edge_costs: &Vec<EdgeCost> = paths.get(&state).unwrap();
+        //dbg!(&edge_costs[0].edge.next.pos, &edge_costs[0].edge.next.dir);
+        //dbg!(&edge_costs[0].edge.prev.pos, &edge_costs[0].edge.prev.dir);
+        for edge_cost in edge_costs.iter() {
+            seats.insert(edge_cost.edge.next.pos);
+            seats.insert(edge_cost.edge.prev.pos);
+            if edge_cost.edge.prev.pos == self.start {
+                continue;
+            }
+            self.count_seats(edge_cost.edge.prev, paths, seats, i + 1);
+        }
     }
 }
 
@@ -230,6 +340,26 @@ fn display(maze: &Maze, paths: &HashMap<(usize, usize), Direction>) {
     }
 }
 
+fn display2(maze: &Maze, paths2: &EdgeCostStore) {
+    let mut paths: HashMap<(usize, usize), Direction> = HashMap::new();
+    for (state, edge_costs) in paths2.iter() {
+        for edge_cost in edge_costs.iter() {
+            let pos = edge_cost.edge.next.pos;
+            let prev = edge_cost.edge.prev.pos;
+            let delta = ((pos.0 - prev.0) as i64, (pos.1 - prev.1) as i64);
+
+            // diff between states can be zero if it was a turn
+            if delta == (0, 0) {
+                continue;
+            }
+
+            let direction = Direction::from_delta(delta);
+            paths.insert(pos, direction);
+        }
+    }
+    display(maze, &paths);
+}
+
 fn main() {
     let input = include_str!("input.txt");
     aoc::run_parts(input, part_1, part_2);
@@ -242,8 +372,17 @@ fn part_1(input: &str) -> i64 {
     result
 }
 
-fn part_2(_input: &str) -> i64 {
-    0
+fn part_2(input: &str) -> i64 {
+    let maze = parse_input(input);
+    let (result, paths) = maze.search2();
+    display2(&maze, &paths);
+    let mut seats = HashSet::new();
+    // dbg!(&paths);
+    dbg!(&paths.len());
+    // maze.count_seats((1, 139), &paths, &mut seats, 0);
+    maze.count_seats(State { pos: (1, 139), dir: Direction::North }, &paths, &mut seats, 0);
+    // maze.count_seats(State { pos: (1, 15), dir: Direction::North }, &paths, &mut seats, 0);
+    seats.len() as i64
 }
 
 #[cfg(test)]
