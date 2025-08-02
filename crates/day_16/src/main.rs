@@ -214,7 +214,6 @@ impl Maze {
             }
             
             // unvisited
-            // dbg!(&edge_cost);
             paths.insert(next, vec![edge_cost.clone()]);
 
             if self.get(next.pos) == 'E' {
@@ -231,7 +230,6 @@ impl Maze {
                 .collect_vec();
 
             for edge_cost in next_edge_costs.into_iter() {
-                dbg!(&edge_cost);
                 queue.push(edge_cost);
             }
         }
@@ -291,8 +289,6 @@ impl Maze {
 
     fn count_seats(&self, state: State, paths: &EdgeCostStore, seats: &mut HashSet<(usize, usize)>, i: i64) {
         let edge_costs: &Vec<EdgeCost> = paths.get(&state).unwrap();
-        //dbg!(&edge_costs[0].edge.next.pos, &edge_costs[0].edge.next.dir);
-        //dbg!(&edge_costs[0].edge.prev.pos, &edge_costs[0].edge.prev.dir);
         for edge_cost in edge_costs.iter() {
             seats.insert(edge_cost.edge.next.pos);
             seats.insert(edge_cost.edge.prev.pos);
@@ -377,11 +373,7 @@ fn part_2(input: &str) -> i64 {
     let (result, paths) = maze.search2();
     display2(&maze, &paths);
     let mut seats = HashSet::new();
-    // dbg!(&paths);
-    dbg!(&paths.len());
-    // maze.count_seats((1, 139), &paths, &mut seats, 0);
     maze.count_seats(State { pos: (1, 139), dir: Direction::North }, &paths, &mut seats, 0);
-    // maze.count_seats(State { pos: (1, 15), dir: Direction::North }, &paths, &mut seats, 0);
     seats.len() as i64
 }
 
