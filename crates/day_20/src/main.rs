@@ -95,10 +95,10 @@ impl Track {
         path
     }
 
-    fn count_cheats(&self, path: &HashMap<Position, i64>, limit: i64) -> i64 {
+    fn count_cheats(&self, path: &HashMap<Position, i64>, limit: i64, cheat_time: i64) -> i64 {
         let mut count = 0;
         for (&pos, _) in path.iter() {
-            count += self.count_cheats_single(pos, path, limit);
+            count += self.count_cheats_single(pos, path, limit, cheat_time);
         }
         count
     }
@@ -110,57 +110,43 @@ impl Track {
         self.map[pos.0][pos.1]
     }
 
-    fn count_cheats_single(&self, pos: Position, path: &HashMap<Position, i64>, limit: i64) -> i64 {
+    fn add(pos: Position, dy: i64, dx: i64) -> Option<Position> {
+        let row = pos.0 as i64 + dy;
+        let col = pos.1 as i64 + dx;
+        if row < 0 || col < 0 {
+            None
+        } else {
+            Some((row as usize, col as usize))
+        }
+    }
+
+    fn count_cheats_single(
+        &self,
+        pos: Position,
+        path: &HashMap<Position, i64>,
+        limit: i64,
+        cheat_time: i64,
+    ) -> i64 {
         let mut count = 0;
-        for dir in DIRECTIONS.iter() {
-            let in_between = (*dir + pos).unwrap();
-            let Some(next) = *dir + in_between else {
-                continue;
-            };
-            println!(
-                "{:?} -> {:?} -> {:?} = {}",
-                pos,
-                in_between,
-                next,
-                self.get(in_between) == SquareState::Wall && self.get(next) == SquareState::Open,
-            );
-            if self.get(in_between) == SquareState::Wall && self.get(next) == SquareState::Open {
-                // valid cheat
-                let time_saved = path.get(&next).unwrap() - path.get(&pos).unwrap() - 2;
-                println!("time_saves={}", time_saved);
-                if time_saved >= limit {
-                    count += 1;
+        for dy in -cheat_time..=cheat_time {
+            for dx in -cheat_time..=cheat_time {
+                if dx.abs() + dy.abs() > cheat_time {
+                    continue;
+                }
+                let Some(next) = Self::add(pos, dy, dx) else {
+                    continue;
+                };
+                if self.get(next) == SquareState::Open {
+                    // valid cheat
+                    let time_saved = path.get(&next).unwrap() - path.get(&pos).unwrap() - dy.abs() - dx.abs();
+                    if time_saved >= limit {
+                        count += 1;
+                    }
                 }
             }
         }
         count
     }
-
-    // fn solve(&self, dists: HashMap<>) {
-    //     let mut dist = HashMap::new();
-    //     let mut prev: HashMap<(usize, usize), (usize, usize)> = HashMap::new();
-    //     let mut queue = VecDeque::new();
-    //     queue.push_front(self.start);
-    //     dist.insert(self.start, 0);
-
-    //     while !queue.is_empty() {
-    //         let pos = queue.pop_back().unwrap();
-    //
-
-    //         for dir in DIRECTIONS {
-    //             let next_pos = (dir + pos).unwrap();
-    //             let State::Open = self.map[next_pos.0][next_pos.1] else { continue; };
-    //             if dist.contains_key(&next_pos) {
-    //                 continue;
-    //             }
-    //             dist.insert(next_pos, dist.get(&pos).unwrap() + 1);
-    //             prev.insert(next_pos, pos);
-    //             queue.push_front(next_pos);
-    //         }
-    //     }
-
-    //     dist
-    // }
 }
 
 fn main() {
@@ -170,11 +156,14 @@ fn main() {
 
 fn part_1(input: &str) -> i64 {
     let track = Track::from_input(input);
-    track.display();
+    // track.display();
     let path = track.find_path();
-    track.count_cheats(&path, 100)
+    track.count_cheats(&path, 100, 2)
 }
 
 fn part_2(input: &str) -> i64 {
-    0
+    let track = Track::from_input(input);
+    // track.display();
+    let path = track.find_path();
+    track.count_cheats(&path, 100, 20)
 }
