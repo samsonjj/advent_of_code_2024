@@ -17,6 +17,22 @@ enum NumericKey {
 }
 
 impl NumericKey {
+    fn from_char(c: char) -> Self {
+        match c {
+            '0' => Self::_0,
+            '1' => Self::_1,
+            '2' => Self::_2,
+            '3' => Self::_3,
+            '4' => Self::_4,
+            '5' => Self::_5,
+            '6' => Self::_6,
+            '7' => Self::_7,
+            '8' => Self::_8,
+            '9' => Self::_9,
+            'A' => Self::A,
+            _ => panic!("invalid char"),
+        }
+    }
     fn as_pos(&self) -> (i32, i32) {
         use NumericKey::*;
         match self {
@@ -113,7 +129,7 @@ impl DirectionalKey {
 struct State<const N: usize> {
     codelen: usize,
     dpads: [DirectionalKey; N],
-    npads: NumericKey,
+    npad: NumericKey,
 }
 
 impl<const N: usize> State<N> {
@@ -121,7 +137,7 @@ impl<const N: usize> State<N> {
         Self {
             codelen: 0,
             dpads: [DirectionalKey::A; N],
-            npads: NumericKey::A,
+            npad: NumericKey::A,
         }
     }
 
@@ -134,10 +150,33 @@ impl<const N: usize> State<N> {
     /// 1. incorrect code entered
     /// 2. hovering over blank space
     fn apply(&self, dirkey: DirectionalKey, pattern: &Vec<NumericKey>) -> Option<Self> {
-        for i in 0..self.dpads.len() {
-            
+        let mut next_state = self.clone();
+
+        let mut curr_dirkey = Some(dirkey);
+        for i in 0..next_state.dpads.len() {
+            let Some(key) = curr_dirkey else { break };
+            if key == DirectionalKey::A {
+                curr_dirkey = Some(next_state.dpads[i]);
+            } else {
+                curr_dirkey = None;
+                let Some(next_dirkey) = next_state.dpads[i].apply(key) else { return None };
+                next_state.dpads[i] = next_dirkey;
+            }
         }
-        unimplemented!()
+
+        let Some(key) = curr_dirkey else { return Some(next_state) };
+        if key == DirectionalKey::A {
+            let numkey = next_state.npad;
+            if pattern[next_state.codelen] != numkey {
+                return None;
+            }
+            next_state.codelen += 1;
+        } else {
+            let Some(next_numkey) = next_state.npad.apply(key) else { return None };
+            next_state.npad = next_numkey;
+        }
+
+        Some(next_state)
     }
 }
 
@@ -154,13 +193,22 @@ fn solve<const N: usize>(pattern: Vec<NumericKey>) -> i64 {
 
     while !queue.is_empty() {
         let curr = queue.pop_front().unwrap();
+        // dbg!(curr);
+
         let curr_dist = *dist.get(&curr).unwrap();
         for dirkey in DirectionalKey::ALL.iter() {
             let Some(next_state) = curr.apply(*dirkey, &pattern) else {
+                // dbg!(dirkey);
                 continue;
             };
 
+            if dist.get(&next_state).is_some() {
+                // dbg!(dirkey, next_state);
+                continue;
+            }
+
             if next_state.is_complete(&pattern) {
+                // dbg!(dirkey);
                 return curr_dist + 1;
             }
 
@@ -172,22 +220,33 @@ fn solve<const N: usize>(pattern: Vec<NumericKey>) -> i64 {
     panic!("queue is empty :(")
 }
 
+fn pattern_from_line(line: &str) -> Vec<NumericKey> {
+    line.chars().map(NumericKey::from_char).collect()
+}
+
 fn main() {
-    let input = include_str!("example.txt");
+    let input = include_str!("input.txt");
     aoc::run_parts(input, part_1, part_2);
 }
 
-fn part_1(_input: &str) -> i64 {
-    let pattern = vec![
-        NumericKey::_0,
-        NumericKey::_2,
-        NumericKey::_9,
-        NumericKey::A,
-    ];
-
-    solve::<2>(pattern)
+fn part_1(input: &str) -> i64 {
+    let patterns: Vec<Vec<NumericKey>> = input.lines().map(pattern_from_line).collect();
+    let mut sum = 0;
+    for (pattern, s) in patterns.into_iter().zip(input.lines()) {
+        // println!("{}", solve::<2>(pattern));
+        let complexity = s[..s.len()-1].parse::<i64>().unwrap();
+        sum += complexity * solve::<2>(pattern);
+    }
+    sum
 }
 
-fn part_2(_input: &str) -> i64 {
-    0
+fn part_2(input: &str) -> i64 {
+    let patterns: Vec<Vec<NumericKey>> = input.lines().map(pattern_from_line).collect();
+    let mut sum = 0;
+    for (pattern, s) in patterns.into_iter().zip(input.lines()) {
+        let complexity = s[..s.len()-1].parse::<i64>().unwrap();
+        sum += complexity * solve::<25>(pattern);
+        println!("hi");
+    }
+    sum
 }
