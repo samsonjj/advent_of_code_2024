@@ -225,7 +225,7 @@ fn pattern_from_line(line: &str) -> Vec<NumericKey> {
 }
 
 fn main() {
-    let input = include_str!("input.txt");
+    let input = include_str!("../input.txt");
     aoc::run_parts(input, part_1, part_2);
 }
 
@@ -245,7 +245,7 @@ fn part_2(input: &str) -> i64 {
     let mut sum = 0;
     for (pattern, s) in patterns.into_iter().zip(input.lines()) {
         let complexity = s[..s.len()-1].parse::<i64>().unwrap();
-        sum += complexity * solve::<25>(pattern);
+        sum += complexity * solve::<7>(pattern);
         println!("hi");
     }
     sum
